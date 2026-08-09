@@ -22,7 +22,7 @@ const __dirname = NodePath.dirname(NodeURL.fileURLToPath(import.meta.url));
 const mockAgentPath = NodePath.join(__dirname, "../../scripts/acp-mock-agent.ts");
 
 function shellSingleQuote(value: string): string {
-  return `'${value.replaceAll("'", `'\"'\"'`)}'`;
+  return `'${value.replaceAll("'", `'"'"'`)}'`;
 }
 
 const KiroTextGenerationTestLayer = ServerConfig.ServerConfig.layerTest(process.cwd(), {
@@ -100,10 +100,7 @@ it.layer(KiroTextGenerationTestLayer)("KiroTextGeneration", (it) => {
             branch: "feature/kiro",
             stagedSummary: "M apps/server/src/provider/Drivers/KiroDriver.ts",
             stagedPatch: "diff --git a/.../KiroDriver.ts b/.../KiroDriver.ts",
-            modelSelection: createModelSelection(
-              ProviderInstanceId.make("kiro"),
-              "kiro-mock-alt",
-            ),
+            modelSelection: createModelSelection(ProviderInstanceId.make("kiro"), "kiro-mock-alt"),
           });
 
           expect(generated.subject).toBe("Add Kiro provider");

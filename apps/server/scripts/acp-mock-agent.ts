@@ -296,7 +296,7 @@ function modelState(): AcpSchema.SessionModelState {
   const models = activeAcpModels();
   const modelId = models.some((model) => model.modelId === currentModelId)
     ? currentModelId
-    : models[0]?.modelId ?? "default";
+    : (models[0]?.modelId ?? "default");
   return {
     currentModelId: modelId,
     availableModels: models,
