@@ -10,6 +10,14 @@ on:
         description: "Release tag (for example public-v0.0.1 or v0.0.1)"
         required: true
         type: string
+      platform:
+        description: "Desktop platform to build"
+        required: false
+        default: all
+        type: choice
+        options:
+          - all
+          - windows
 
 permissions:
   contents: write
@@ -23,31 +31,13 @@ env:
 
 jobs:
   build:
-    name: Build ${{ matrix.name }}
-    runs-on: ${{ matrix.runner }}
+    name: Build ${{ matrix.platform == 'linux' && 'Linux x64' || matrix.platform == 'mac' && 'macOS arm64' || 'Windows x64' }}
+    runs-on: ${{ matrix.platform == 'linux' && 'ubuntu-24.04' || matrix.platform == 'mac' && 'macos-15' || 'windows-2025' }}
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - name: Linux x64
-            id: linux-x64
-            runner: ubuntu-24.04
-            platform: linux
-            target: AppImage
-            arch: x64
-          - name: macOS arm64
-            id: macos-arm64
-            runner: macos-15
-            platform: mac
-            target: dmg
-            arch: arm64
-          - name: Windows x64
-            id: windows-x64
-            runner: windows-2025
-            platform: win
-            target: nsis
-            arch: x64
+        platform: ${{ fromJSON(github.event_name == 'workflow_dispatch' && inputs.platform == 'windows' && '["win"]' || '["linux","mac","win"]') }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -84,8 +74,8 @@ jobs:
 
           vp run dist:desktop:artifact \
             --platform "${{ matrix.platform }}" \
-            --target "${{ matrix.target }}" \
-            --arch "${{ matrix.arch }}" \
+            --target "${{ matrix.platform == 'linux' && 'AppImage' || matrix.platform == 'mac' && 'dmg' || 'nsis' }}" \
+            --arch "${{ matrix.platform == 'mac' && 'arm64' || 'x64' }}" \
             --build-version "$version" \
             --verbose
 
@@ -112,7 +102,7 @@ jobs:
       - name: Upload package artifact
         uses: actions/upload-artifact@v7
         with:
-          name: public-package-${{ matrix.id }}
+          name: public-package-${{ matrix.platform }}-${{ matrix.platform == 'mac' && 'arm64' || 'x64' }}
           path: release-assets/*
           if-no-files-found: error
           retention-days: 14
