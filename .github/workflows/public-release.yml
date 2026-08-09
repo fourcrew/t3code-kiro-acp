@@ -1,0 +1,148 @@
+name: Public Desktop Release
+
+on:
+  push:
+    tags:
+      - "public-v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag (for example public-v0.0.1 or v0.0.1)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: public-desktop-release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+
+jobs:
+  build:
+    name: Build ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x64
+            id: linux-x64
+            runner: ubuntu-24.04
+            platform: linux
+            target: AppImage
+            arch: x64
+          - name: macOS arm64
+            id: macos-arm64
+            runner: macos-15
+            platform: mac
+            target: dmg
+            arch: arm64
+          - name: Windows x64
+            id: windows-x64
+            runner: windows-2025
+            platform: win
+            target: nsis
+            arch: x64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Vite+
+        uses: voidzero-dev/setup-vp@v1
+        with:
+          node-version-file: package.json
+          cache: true
+          run-install: true
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Ensure Electron runtime is installed
+        run: vp run --filter @t3tools/desktop ensure:electron
+
+      - name: Install Linux packaging tools
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y imagemagick
+
+      - name: Build unsigned desktop package
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#public-v}"
+          version="${version#v}"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Release tag must contain a semantic version: $RELEASE_TAG" >&2
+            exit 1
+          fi
+
+          vp run dist:desktop:artifact \
+            --platform "${{ matrix.platform }}" \
+            --target "${{ matrix.target }}" \
+            --arch "${{ matrix.arch }}" \
+            --build-version "$version" \
+            --verbose
+
+      - name: Collect package files
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          shopt -s nullglob
+          files=(
+            release/*.dmg
+            release/*.zip
+            release/*.AppImage
+            release/*.exe
+            release/*.blockmap
+            release/*.yml
+          )
+          if (( ${#files[@]} == 0 )); then
+            echo "No desktop package files were produced." >&2
+            exit 1
+          fi
+          cp "${files[@]}" release-assets/
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: public-package-${{ matrix.id }}
+          path: release-assets/*
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Publish GitHub Release
+    needs: build
+    if: ${{ !failure() && !cancelled() }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Download package artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: public-package-*
+          merge-multiple: true
+          path: release-assets
+
+      - name: Create checksums
+        working-directory: release-assets
+        run: sha256sum * > SHA256SUMS.txt
+
+      - name: Publish downloadable GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          target_commitish: ${{ github.sha }}
+          name: T3 Code ${{ env.RELEASE_TAG }}
+          generate_release_notes: true
+          prerelease: true
+          make_latest: false
+          files: release-assets/*
+          fail_on_unmatched_files: true
+          token: ${{ github.token }}
