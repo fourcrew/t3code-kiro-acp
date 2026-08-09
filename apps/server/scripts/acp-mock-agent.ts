@@ -40,6 +40,7 @@ const failPrompt = process.env.T3_ACP_FAIL_PROMPT === "1";
 const failSetConfigOption = process.env.T3_ACP_FAIL_SET_CONFIG_OPTION === "1";
 const exitOnSetConfigOption = process.env.T3_ACP_EXIT_ON_SET_CONFIG_OPTION === "1";
 const promptResponseText = process.env.T3_ACP_PROMPT_RESPONSE_TEXT;
+const useKiroModeCatalog = process.env.T3_ACP_KIRO_MODE_CATALOG === "1";
 const promptDelayMs = Number(process.env.T3_ACP_PROMPT_DELAY_MS ?? "0");
 const permissionOptionIds = {
   allowOnce: process.env.T3_ACP_ALLOW_ONCE_OPTION_ID ?? "allow-once",
@@ -48,7 +49,7 @@ const permissionOptionIds = {
 };
 const sessionId = "mock-session-1";
 
-let currentModeId = "ask";
+let currentModeId = useKiroModeCatalog ? "kiro_default" : "ask";
 let currentModelId = "default";
 let parameterizedModelPicker = false;
 let currentReasoning = "medium";
@@ -103,7 +104,7 @@ function configOptions(): ReadonlyArray<AcpSchema.SessionConfigOption> {
         category: "mode",
         type: "select",
         currentValue: currentModeId,
-        options: availableModes.map((mode) => ({
+        options: activeModes().map((mode) => ({
           value: mode.id,
           name: mode.name,
           ...(mode.description ? { description: mode.description } : {}),
@@ -254,7 +255,7 @@ function availableModels(): ReadonlyArray<{
   }));
 }
 
-const availableModes: ReadonlyArray<AcpSchema.SessionMode> = [
+const defaultAvailableModes: ReadonlyArray<AcpSchema.SessionMode> = [
   {
     id: "ask",
     name: "Ask",
@@ -272,10 +273,32 @@ const availableModes: ReadonlyArray<AcpSchema.SessionMode> = [
   },
 ];
 
+const kiroAvailableModes: ReadonlyArray<AcpSchema.SessionMode> = [
+  {
+    id: "kiro_default",
+    name: "kiro_default",
+    description: "The default agent for Kiro CLI",
+  },
+  {
+    id: "kiro_planner",
+    name: "kiro_planner",
+    description: "Specialized planning agent",
+  },
+  {
+    id: "kiro_guide",
+    name: "kiro_guide",
+    description: "Guide agent for built-in tools and Code Intelligence",
+  },
+];
+
+function activeModes(): ReadonlyArray<AcpSchema.SessionMode> {
+  return useKiroModeCatalog ? kiroAvailableModes : defaultAvailableModes;
+}
+
 function modeState(): AcpSchema.SessionModeState {
   return {
     currentModeId,
-    availableModes,
+    availableModes: activeModes(),
   };
 }
 

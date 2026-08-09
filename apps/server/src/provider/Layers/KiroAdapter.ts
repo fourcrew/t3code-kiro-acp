@@ -79,9 +79,7 @@ const encodeUnknownJsonStringExit = Schema.encodeUnknownExit(Schema.fromJsonStri
 
 const PROVIDER = ProviderDriverKind.make("kiro");
 const KIRO_RESUME_VERSION = 1 as const;
-const ACP_PLAN_MODE_ALIASES = ["plan", "architect"];
-const ACP_IMPLEMENT_MODE_ALIASES = ["code", "agent", "default", "chat", "implement"];
-const ACP_APPROVAL_MODE_ALIASES = ["ask"];
+const ACP_PLAN_MODE_ALIASES = ["plan", "planner", "architect"];
 
 function encodeJsonStringForDiagnostics(input: unknown): string | undefined {
   const result = encodeUnknownJsonStringExit(input);
@@ -125,6 +123,8 @@ interface KiroSessionContext {
   session: ProviderSession;
   readonly scope: Scope.Closeable;
   readonly acp: AcpSessionRuntime.AcpSessionRuntime["Service"];
+  /** Initial ACP agent mode from session/new or session/load; normal turns restore it after Plan. */
+  readonly baseModeId: string | undefined;
   notificationFiber: Fiber.Fiber<void, never> | undefined;
   readonly pendingApprovals: Map<ApprovalRequestId, PendingApproval>;
   readonly pendingUserInputs: Map<ApprovalRequestId, PendingUserInput>;
@@ -175,13 +175,11 @@ function parseKiroResume(raw: unknown): { sessionId: string } | undefined {
   return { sessionId: raw.sessionId.trim() };
 }
 
-function normalizeModeSearchText(mode: AcpSessionMode): string {
-  return [mode.id, mode.name, mode.description]
-    .filter((value): value is string => typeof value === "string" && value.length > 0)
-    .join(" ")
+function normalizeModeIdentifier(value: string): ReadonlyArray<string> {
+  return value
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
+    .split(/[^a-z0-9]+/g)
+    .filter((token) => token.length > 0);
 }
 
 function findModeByAliases(
@@ -200,21 +198,23 @@ function findModeByAliases(
     }
   }
   for (const alias of normalizedAliases) {
-    const partial = modes.find((mode) => normalizeModeSearchText(mode).includes(alias));
-    if (partial) {
-      return partial;
+    const tokenMatch = modes.find((mode) => {
+      const identifiers = [
+        ...normalizeModeIdentifier(mode.id),
+        ...normalizeModeIdentifier(mode.name),
+      ];
+      return identifiers.includes(alias);
+    });
+    if (tokenMatch) {
+      return tokenMatch;
     }
   }
   return undefined;
 }
 
-function isPlanMode(mode: AcpSessionMode): boolean {
-  return findModeByAliases([mode], ACP_PLAN_MODE_ALIASES) !== undefined;
-}
-
 function resolveRequestedModeId(input: {
   readonly interactionMode: ProviderInteractionMode | undefined;
-  readonly runtimeMode: RuntimeMode;
+  readonly baseModeId: string | undefined;
   readonly modeState: AcpSessionModeState | undefined;
 }): string | undefined {
   const modeState = input.modeState;
@@ -226,21 +226,7 @@ function resolveRequestedModeId(input: {
     return findModeByAliases(modeState.availableModes, ACP_PLAN_MODE_ALIASES)?.id;
   }
 
-  if (input.runtimeMode === "approval-required") {
-    return (
-      findModeByAliases(modeState.availableModes, ACP_APPROVAL_MODE_ALIASES)?.id ??
-      findModeByAliases(modeState.availableModes, ACP_IMPLEMENT_MODE_ALIASES)?.id ??
-      modeState.availableModes.find((mode) => !isPlanMode(mode))?.id ??
-      modeState.currentModeId
-    );
-  }
-
-  return (
-    findModeByAliases(modeState.availableModes, ACP_IMPLEMENT_MODE_ALIASES)?.id ??
-    findModeByAliases(modeState.availableModes, ACP_APPROVAL_MODE_ALIASES)?.id ??
-    modeState.availableModes.find((mode) => !isPlanMode(mode))?.id ??
-    modeState.currentModeId
-  );
+  return input.baseModeId ?? modeState.currentModeId;
 }
 
 function applyRequestedSessionConfiguration<E>(input: {
@@ -254,6 +240,7 @@ function applyRequestedSessionConfiguration<E>(input: {
       }
     | undefined;
   readonly currentModelId: string | undefined;
+  readonly baseModeId: string | undefined;
   readonly mapError: (context: {
     readonly cause: import("effect-acp/errors").AcpError;
     readonly method: "session/set_model" | "session/set_mode";
@@ -273,10 +260,22 @@ function applyRequestedSessionConfiguration<E>(input: {
       });
     }
 
+    const modeState = yield* input.runtime.getModeState;
     const requestedModeId = resolveRequestedModeId({
       interactionMode: input.interactionMode,
+      baseModeId: input.baseModeId,
+      modeState,
+    });
+    yield* Effect.logDebug("Kiro session configuration resolved.", {
+      currentModelId: input.currentModelId ?? null,
+      requestedModelId: input.modelSelection
+        ? resolveKiroAcpBaseModelId(input.modelSelection.model)
+        : null,
+      currentModeId: modeState?.currentModeId ?? null,
+      baseModeId: input.baseModeId ?? null,
+      requestedModeId: requestedModeId ?? null,
       runtimeMode: input.runtimeMode,
-      modeState: yield* input.runtime.getModeState,
+      interactionMode: input.interactionMode ?? null,
     });
     if (!requestedModeId) {
       return;
@@ -653,12 +652,14 @@ export function makeKiroAdapter(kiroSettings: KiroSettings, options?: KiroAdapte
             ),
           );
 
+          const baseModeId = (yield* acp.getModeState)?.currentModeId;
           yield* applyRequestedSessionConfiguration({
             runtime: acp,
             runtimeMode: input.runtimeMode,
             interactionMode: undefined,
             modelSelection: kiroModelSelection,
             currentModelId: currentKiroModelIdFromSessionSetup(started.sessionSetupResult),
+            baseModeId,
             mapError: ({ cause, method }) =>
               mapAcpToAdapterError(PROVIDER, input.threadId, method, cause),
           });
@@ -687,6 +688,7 @@ export function makeKiroAdapter(kiroSettings: KiroSettings, options?: KiroAdapte
             session,
             scope: sessionScope,
             acp,
+            baseModeId,
             notificationFiber: undefined,
             pendingApprovals,
             pendingUserInputs,
@@ -854,6 +856,7 @@ export function makeKiroAdapter(kiroSettings: KiroSettings, options?: KiroAdapte
             currentModelId: ctx.session.model
               ? resolveKiroAcpBaseModelId(ctx.session.model)
               : undefined,
+            baseModeId: ctx.baseModeId,
             mapError: ({ cause, method }) =>
               mapAcpToAdapterError(PROVIDER, input.threadId, method, cause),
           });

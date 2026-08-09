@@ -142,6 +142,48 @@ kiroAdapterTestLayer("KiroAdapterLive", (it) => {
     }),
   );
 
+  it.effect("keeps the native Guide description from hijacking the default Kiro agent", () =>
+    Effect.gen(function* () {
+      const adapter = yield* KiroAdapter;
+      const settings = yield* ServerSettingsService;
+      const directory = yield* Effect.promise(() =>
+        NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "kiro-acp-mode-selection-")),
+      );
+      const requestLogPath = NodePath.join(directory, "requests.ndjson");
+      yield* Effect.promise(() => NodeFSP.writeFile(requestLogPath, "", "utf8"));
+      const binaryPath = yield* Effect.promise(() =>
+        makeMockKiroWrapper({
+          T3_ACP_KIRO_MODELS: "1",
+          T3_ACP_KIRO_MODE_CATALOG: "1",
+          T3_ACP_REQUEST_LOG_PATH: requestLogPath,
+        }),
+      );
+      yield* settings.updateSettings({ providers: { kiro: { binaryPath } } });
+
+      const threadId = ThreadId.make("kiro-mode-selection");
+      yield* adapter.startSession({
+        threadId,
+        provider: ProviderDriverKind.make("kiro"),
+        cwd: directory,
+        runtimeMode: "full-access",
+      });
+      yield* adapter.sendTurn({
+        threadId,
+        input: "plan the change",
+        attachments: [],
+        interactionMode: "plan",
+      });
+      yield* adapter.sendTurn({ threadId, input: "implement it", attachments: [] });
+      yield* adapter.stopSession(threadId);
+
+      const requests = yield* Effect.promise(() => readJsonLines(requestLogPath));
+      const setModes = requests
+        .filter((request) => request.method === "session/set_mode")
+        .map((request) => request.params?.modeId);
+      assert.deepStrictEqual(setModes, ["kiro_planner", "kiro_default"]);
+    }),
+  );
+
   it.effect("retains the interactive model and emits raw JSON only as a chat content delta", () =>
     Effect.gen(function* () {
       const adapter = yield* KiroAdapter;
