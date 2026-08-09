@@ -68,7 +68,7 @@ export interface AcpSessionRuntimeOptions {
     readonly name: string;
     readonly version: string;
   };
-  readonly authMethodId: string;
+  readonly authMethodId?: string;
   readonly mcpServers?: ReadonlyArray<EffectAcpSchema.McpServer>;
   readonly requestLogger?: (event: AcpSessionRequestLogEvent) => Effect.Effect<void, never>;
   readonly protocolLogging?: {
@@ -205,6 +205,13 @@ export class AcpSessionRuntime extends Context.Service<
      * @see https://agentclientprotocol.com/protocol/schema#session/set_config_option
      */
     readonly setMode: (
+      modeId: string,
+    ) => Effect.Effect<EffectAcpSchema.SetSessionModeResponse, EffectAcpErrors.AcpError>;
+    /**
+     * Selects the active mode through the ACP session/set_mode method.
+     * @see https://agentclientprotocol.com/protocol/schema#session/set_mode
+     */
+    readonly setSessionMode: (
       modeId: string,
     ) => Effect.Effect<EffectAcpSchema.SetSessionModeResponse, EffectAcpErrors.AcpError>;
     /**
@@ -541,15 +548,17 @@ export const make = (
         acp.agent.initialize(initializePayload),
       );
 
-      const authenticatePayload = {
-        methodId: options.authMethodId,
-      } satisfies EffectAcpSchema.AuthenticateRequest;
+      if (options.authMethodId?.trim()) {
+        const authenticatePayload = {
+          methodId: options.authMethodId,
+        } satisfies EffectAcpSchema.AuthenticateRequest;
 
-      yield* runLoggedRequest(
-        "authenticate",
-        authenticatePayload,
-        acp.agent.authenticate(authenticatePayload),
-      );
+        yield* runLoggedRequest(
+          "authenticate",
+          authenticatePayload,
+          acp.agent.authenticate(authenticatePayload),
+        );
+      }
 
       let sessionId: string;
       let sessionSetupResult:
@@ -782,6 +791,29 @@ export const make = (
               Effect.as({} satisfies EffectAcpSchema.SetSessionModeResponse),
             );
           }),
+        ),
+      setSessionMode: (modeId) =>
+        getStartedState.pipe(
+          Effect.flatMap((started) =>
+            Ref.get(modeStateRef).pipe(
+              Effect.flatMap((modeState) => {
+                if (modeState?.currentModeId === modeId) {
+                  return Effect.succeed({} satisfies EffectAcpSchema.SetSessionModeResponse);
+                }
+                const requestPayload = {
+                  sessionId: started.sessionId,
+                  modeId,
+                } satisfies EffectAcpSchema.SetSessionModeRequest;
+                return runLoggedRequest(
+                  "session/set_mode",
+                  requestPayload,
+                  acp.raw.request("session/set_mode", requestPayload).pipe(
+                    Effect.as({} satisfies EffectAcpSchema.SetSessionModeResponse),
+                  ),
+                ).pipe(Effect.tap(() => updateCurrentModeId(modeId)));
+              }),
+            ),
+          ),
         ),
       setConfigOption,
       setModel: (model) =>
