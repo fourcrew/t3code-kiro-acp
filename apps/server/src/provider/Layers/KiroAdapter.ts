@@ -67,9 +67,12 @@ import {
 import { makeAcpNativeLoggerFactory } from "../acp/AcpNativeLogging.ts";
 import {
   applyKiroAcpModelSelection,
+  currentKiroModelIdFromSessionSetup,
+  KIRO_INTERACTIVE_ACP_CLIENT_CAPABILITIES,
   makeKiroAcpRuntime,
   resolveKiroAcpBaseModelId,
 } from "../acp/KiroAcpSupport.ts";
+import { installKiroAcpClientTools } from "../acp/KiroAcpClientTools.ts";
 import { type KiroAdapterShape } from "../Services/KiroAdapter.ts";
 import { type EventNdjsonLogger, makeEventNdjsonLogger } from "./EventNdjsonLogger.ts";
 const encodeUnknownJsonStringExit = Schema.encodeUnknownExit(Schema.fromJsonString(Schema.Unknown));
@@ -250,6 +253,7 @@ function applyRequestedSessionConfiguration<E>(input: {
         readonly options?: ReadonlyArray<ProviderOptionSelection> | null | undefined;
       }
     | undefined;
+  readonly currentModelId: string | undefined;
   readonly mapError: (context: {
     readonly cause: import("effect-acp/errors").AcpError;
     readonly method: "session/set_model" | "session/set_mode";
@@ -259,7 +263,7 @@ function applyRequestedSessionConfiguration<E>(input: {
     if (input.modelSelection) {
       yield* applyKiroAcpModelSelection({
         runtime: input.runtime,
-        currentModelId: undefined,
+        currentModelId: input.currentModelId,
         requestedModelId: resolveKiroAcpBaseModelId(input.modelSelection.model),
         mapError: (cause) =>
           input.mapError({
@@ -525,6 +529,7 @@ export function makeKiroAdapter(kiroSettings: KiroSettings, options?: KiroAdapte
           const mcpSession = McpProviderSession.readMcpProviderSession(input.threadId);
           const acp = yield* makeKiroAcpRuntime({
             kiroSettings: effectiveKiroSettings,
+            clientCapabilities: KIRO_INTERACTIVE_ACP_CLIENT_CAPABILITIES,
             ...(options?.environment ? { environment: options.environment } : {}),
             childProcessSpawner,
             cwd,
@@ -633,6 +638,14 @@ export function makeKiroAdapter(kiroSettings: KiroSettings, options?: KiroAdapte
                 }),
               ),
             );
+            yield* installKiroAcpClientTools({
+              runtime: acp,
+              childProcessSpawner,
+              cwd,
+              fileSystem,
+              path,
+              sessionScope,
+            });
             return yield* acp.start();
           }).pipe(
             Effect.mapError((error) =>
@@ -645,6 +658,7 @@ export function makeKiroAdapter(kiroSettings: KiroSettings, options?: KiroAdapte
             runtimeMode: input.runtimeMode,
             interactionMode: undefined,
             modelSelection: kiroModelSelection,
+            currentModelId: currentKiroModelIdFromSessionSetup(started.sessionSetupResult),
             mapError: ({ cause, method }) =>
               mapAcpToAdapterError(PROVIDER, input.threadId, method, cause),
           });
@@ -656,7 +670,9 @@ export function makeKiroAdapter(kiroSettings: KiroSettings, options?: KiroAdapte
             status: "ready",
             runtimeMode: input.runtimeMode,
             cwd,
-            model: kiroModelSelection?.model,
+            model:
+              kiroModelSelection?.model ??
+              currentKiroModelIdFromSessionSetup(started.sessionSetupResult),
             threadId: input.threadId,
             resumeCursor: {
               schemaVersion: KIRO_RESUME_VERSION,
@@ -835,6 +851,9 @@ export function makeKiroAdapter(kiroSettings: KiroSettings, options?: KiroAdapte
                     model,
                     options: turnModelSelection?.options,
                   },
+            currentModelId: ctx.session.model
+              ? resolveKiroAcpBaseModelId(ctx.session.model)
+              : undefined,
             mapError: ({ cause, method }) =>
               mapAcpToAdapterError(PROVIDER, input.threadId, method, cause),
           });
