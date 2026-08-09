@@ -739,7 +739,7 @@ const program = Effect.gen(function* () {
         });
         if (source.content !== "bridge input\n") {
           return yield* AcpError.AcpRequestError.internalError(
-            `Unexpected Kiro client file content: ${JSON.stringify(source.content)}`,
+            "Unexpected Kiro client file content.",
           );
         }
         yield* agent.client.writeTextFile({
@@ -759,7 +759,7 @@ const program = Effect.gen(function* () {
         yield* terminal.release;
         if (exit.exitCode !== 0 || output.output !== "git pull available") {
           return yield* AcpError.AcpRequestError.internalError(
-            `Unexpected Kiro client terminal result: ${JSON.stringify({ exit, output })}`,
+            "Unexpected Kiro client terminal result.",
           );
         }
         yield* agent.client.sessionUpdate({
@@ -941,7 +941,7 @@ const program = Effect.gen(function* () {
       });
     }
 
-    if (method !== "session/mode/set") {
+    if (method !== "session/mode/set" && method !== "session/set_mode") {
       return Effect.fail(AcpError.AcpRequestError.methodNotFound(method));
     }
 
