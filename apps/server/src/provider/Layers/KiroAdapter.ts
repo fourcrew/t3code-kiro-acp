@@ -305,10 +305,7 @@ function selectAutoApprovedPermissionOption(
   return undefined;
 }
 
-export function makeKiroAdapter(
-  kiroSettings: KiroSettings,
-  options?: KiroAdapterLiveOptions,
-) {
+export function makeKiroAdapter(kiroSettings: KiroSettings, options?: KiroAdapterLiveOptions) {
   return Effect.gen(function* () {
     const boundInstanceId = options?.instanceId ?? ProviderInstanceId.make("kiro");
     const fileSystem = yield* FileSystem.FileSystem;

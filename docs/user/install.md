@@ -53,7 +53,7 @@ advertises no ACP authentication method.
 | Claude     | [Claude Code](https://claude.com/product/claude-code) | `claude`       | `claude auth login`   |
 | Cursor     | [Cursor CLI](https://cursor.com/cli)                  | `cursor-agent` | `agent login`         |
 | Grok Build | [Grok Build CLI](https://x.ai/cli)                    | `grok`         | `grok login`          |
-| Kiro       | [Kiro CLI ACP](https://kiro.dev/docs/cli/acp/)        | `kiro-cli`     | not required by ACP  |
+| Kiro       | [Kiro CLI ACP](https://kiro.dev/docs/cli/acp/)        | `kiro-cli`     | not required by ACP   |
 | OpenCode   | [OpenCode](https://opencode.ai)                       | `opencode`     | `opencode auth login` |
 
 Cursor is the one to watch: install Cursor CLI, which provides the `cursor-agent` binary that

@@ -93,7 +93,7 @@ it.layer(NodeServices.layer)("checkKiroProviderStatus", (it) => {
           const kiroPath = path.join(dir, "kiro-cli");
           yield* fs.writeFileString(
             kiroPath,
-            ["#!/bin/sh", "printf \"kiro-cli 0.0.99\\n\"", "exit 0", ""].join("\n"),
+            ["#!/bin/sh", 'printf "kiro-cli 0.0.99\\n"', "exit 0", ""].join("\n"),
           );
           yield* fs.chmod(kiroPath, 0o755);
 
