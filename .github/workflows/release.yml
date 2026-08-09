@@ -1,12 +1,8 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - "v*.*.*"
-      - "!v*-nightly.*"
-  schedule:
-    - cron: "0 */3 * * *"
+  # The upstream release pipeline requires private signing, relay, and npm infrastructure.
+  # Public packages are built by .github/workflows/public-release.yml instead.
   workflow_dispatch:
     inputs:
       channel:
