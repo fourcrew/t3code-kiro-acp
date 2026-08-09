@@ -38,6 +38,15 @@ export function ProviderIcon(props: ProviderIconProps) {
     );
   }
 
+  if (props.provider === "kiro") {
+    return (
+      <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+        <Path fill="#9046FF" d="M2 2h20v20H2z" />
+        <Path fill="#fff" d="M7 6h3v5l5-5h4l-6 6 6 6h-4l-5-5v5H7V6Z" />
+      </Svg>
+    );
+  }
+
   if (props.provider === "cursor") {
     return (
       <Svg width={size} height={size} viewBox="0 0 466.73 532.09" fill="none">

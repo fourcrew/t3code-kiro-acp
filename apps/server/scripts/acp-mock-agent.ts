@@ -282,14 +282,24 @@ const grokAcpModels: ReadonlyArray<AcpSchema.ModelInfo> = [
   { modelId: "grok-build", name: "Grok Build" },
   { modelId: "grok-mock-alt", name: "Grok Mock Alt" },
 ];
+const kiroAcpModels: ReadonlyArray<AcpSchema.ModelInfo> = [
+  { modelId: "auto", name: "Auto" },
+  { modelId: "kiro-mock-alt", name: "Kiro Mock Alt" },
+];
+const useKiroModels = process.env.T3_ACP_KIRO_MODELS === "1";
+
+function activeAcpModels(): ReadonlyArray<AcpSchema.ModelInfo> {
+  return useKiroModels ? kiroAcpModels : grokAcpModels;
+}
 
 function modelState(): AcpSchema.SessionModelState {
-  const modelId = grokAcpModels.some((model) => model.modelId === currentModelId)
+  const models = activeAcpModels();
+  const modelId = models.some((model) => model.modelId === currentModelId)
     ? currentModelId
-    : "grok-build";
+    : models[0]?.modelId ?? "default";
   return {
     currentModelId: modelId,
-    availableModels: grokAcpModels,
+    availableModels: models,
   };
 }
 
@@ -382,7 +392,7 @@ const program = Effect.gen(function* () {
 
   yield* agent.handleSetSessionModel((request) =>
     Effect.gen(function* () {
-      if (!grokAcpModels.some((model) => model.modelId === request.modelId)) {
+      if (!activeAcpModels().some((model) => model.modelId === request.modelId)) {
         return yield* AcpError.AcpRequestError.invalidParams(
           `Unknown mock model id: ${request.modelId}`,
           {

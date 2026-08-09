@@ -44,7 +44,8 @@ yay -S t3code-bin
 ## Providers
 
 T3 Code drives provider CLIs; it does not ship them. Install the CLI for each provider you want
-to use, then authenticate it.
+to use, then authenticate it when that CLI requires it. Kiro ACP uses `kiro-cli acp` directly and
+advertises no ACP authentication method.
 
 | Provider   | CLI                                                   | Default binary | Log in with           |
 | ---------- | ----------------------------------------------------- | -------------- | --------------------- |
@@ -52,13 +53,15 @@ to use, then authenticate it.
 | Claude     | [Claude Code](https://claude.com/product/claude-code) | `claude`       | `claude auth login`   |
 | Cursor     | [Cursor CLI](https://cursor.com/cli)                  | `cursor-agent` | `agent login`         |
 | Grok Build | [Grok Build CLI](https://x.ai/cli)                    | `grok`         | `grok login`          |
+| Kiro       | [Kiro CLI ACP](https://kiro.dev/docs/cli/acp/)        | `kiro-cli`     | not required by ACP  |
 | OpenCode   | [OpenCode](https://opencode.ai)                       | `opencode`     | `opencode auth login` |
 
 Cursor is the one to watch: install Cursor CLI, which provides the `cursor-agent` binary that
 T3 Code looks for, but authenticate with `agent login`, not `cursor-agent login`.
 
 Run the login command on the machine running the T3 Code server, not on the device you browse
-from.
+from. For Kiro, install the CLI on that machine and ensure `kiro-cli acp` can start there; T3 Code
+creates the ACP session without calling `authenticate`.
 
 ### Binary Discovery
 
@@ -69,12 +72,14 @@ started T3 Code.
 
 ### When Auth Is Needed
 
-Provider auth is required before you start a session with that provider, not before you start
-T3 Code. You can install T3 Code, open it, and add providers afterwards. A provider that is not
-authenticated shows its status in **Settings** and fails at session start with the login command
-to run.
+For providers that require login, provider auth is required before you start a session with that
+provider, not before you start T3 Code. You can install T3 Code, open it, and add providers
+afterwards. An unauthenticated provider shows its status in **Settings** and reports the login
+command to run. Kiro is the exception: its ACP handshake advertises no authentication methods and
+T3 Code starts `session/new` directly.
 
-For multi-account setups, see [Codex](./providers-codex.md) and [Claude](./providers-claude.md).
+For multi-account setups, see [Codex](./providers-codex.md) and [Claude](./providers-claude.md). For Kiro ACP
+settings and troubleshooting, see [Kiro](./providers-kiro.md).
 
 ## Next Steps
 

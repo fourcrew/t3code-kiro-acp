@@ -7,7 +7,7 @@ orchestration layer does not know which one is behind a thread.
 
 ## Built-in drivers
 
-[`builtInDrivers.ts`][drivers] exports `BUILT_IN_DRIVERS` with five entries:
+[`builtInDrivers.ts`][drivers] exports `BUILT_IN_DRIVERS` with six entries:
 
 | Driver kind   | Driver source                           |
 | ------------- | --------------------------------------- |
@@ -15,7 +15,20 @@ orchestration layer does not know which one is behind a thread.
 | `claudeAgent` | [`Drivers/ClaudeDriver.ts`][claude]     |
 | `cursor`      | [`Drivers/CursorDriver.ts`][cursor]     |
 | `grok`        | [`Drivers/GrokDriver.ts`][grok]         |
+| `kiro`        | [`Drivers/KiroDriver.ts`][kiro]         |
 | `opencode`    | [`Drivers/OpenCodeDriver.ts`][opencode] |
+
+### Kiro ACP
+
+Kiro is implemented as a standard ACP driver in [`KiroDriver.ts`][kiro]. Its support module starts
+`kiro-cli acp` and optionally appends `--agent <name>`. Unlike the authenticated ACP drivers, the
+Kiro runtime omits `authMethodId`: Kiro advertises an empty `authMethods` list, so the runtime goes
+straight from `initialize` to `session/new`.
+
+Kiro model discovery reads the typed `session/new` model state, with `auto` as the fallback. The
+adapter maps model changes to `session/set_model` and mode changes to `session/set_mode`, while
+keeping the shared resume cursor and permission/event contracts. Kiro structured text generation
+uses the same ACP stream and JSON extraction path as the other ACP-backed drivers.
 
 Each driver declares its `driverKind`, a `configSchema`, and a `create` function that builds an
 adapter in a child scope. Adapter implementations live beside them in
@@ -80,6 +93,7 @@ when a request opens (approval) or user input is requested, via
 [claude]: ../../apps/server/src/provider/Drivers/ClaudeDriver.ts
 [cursor]: ../../apps/server/src/provider/Drivers/CursorDriver.ts
 [grok]: ../../apps/server/src/provider/Drivers/GrokDriver.ts
+[kiro]: ../../apps/server/src/provider/Drivers/KiroDriver.ts
 [opencode]: ../../apps/server/src/provider/Drivers/OpenCodeDriver.ts
 [adapter]: ../../apps/server/src/provider/Services/ProviderAdapter.ts
 [instances]: ../../apps/server/src/provider/Services/ProviderInstanceRegistry.ts
