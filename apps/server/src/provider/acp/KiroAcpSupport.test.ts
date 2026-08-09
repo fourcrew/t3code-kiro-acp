@@ -5,6 +5,7 @@ import * as EffectAcpErrors from "effect-acp/errors";
 import {
   applyKiroAcpModelSelection,
   buildKiroAcpSpawnInput,
+  KIRO_INTERACTIVE_ACP_CLIENT_CAPABILITIES,
   resolveKiroAcpBaseModelId,
 } from "./KiroAcpSupport.ts";
 
@@ -13,6 +14,15 @@ describe("resolveKiroAcpBaseModelId", () => {
     expect(resolveKiroAcpBaseModelId(undefined)).toBe("auto");
     expect(resolveKiroAcpBaseModelId("   ")).toBe("auto");
     expect(resolveKiroAcpBaseModelId("  kiro-mock-alt  ")).toBe("kiro-mock-alt");
+  });
+});
+
+describe("KIRO_INTERACTIVE_ACP_CLIENT_CAPABILITIES", () => {
+  it("advertises the filesystem and terminal callbacks backed by the interactive adapter", () => {
+    expect(KIRO_INTERACTIVE_ACP_CLIENT_CAPABILITIES).toEqual({
+      fs: { readTextFile: true, writeTextFile: true },
+      terminal: true,
+    });
   });
 });
 

@@ -14,9 +14,22 @@ const KIRO_DRIVER_KIND = ProviderDriverKind.make("kiro");
 
 type KiroAcpRuntimeKiroSettings = Pick<KiroSettings, "agent" | "binaryPath">;
 
+/**
+ * Interactive Kiro sessions can request workspace file access and terminal
+ * execution through ACP. Callers must register all matching handlers before
+ * starting the runtime.
+ */
+export const KIRO_INTERACTIVE_ACP_CLIENT_CAPABILITIES = {
+  fs: {
+    readTextFile: true,
+    writeTextFile: true,
+  },
+  terminal: true,
+} satisfies NonNullable<EffectAcpSchema.InitializeRequest["clientCapabilities"]>;
+
 export interface KiroAcpRuntimeInput extends Omit<
   AcpSessionRuntime.AcpSessionRuntimeOptions,
-  "authMethodId" | "clientCapabilities" | "spawn"
+  "authMethodId" | "spawn"
 > {
   readonly childProcessSpawner: ChildProcessSpawner.ChildProcessSpawner["Service"];
   readonly kiroSettings: KiroAcpRuntimeKiroSettings | null | undefined;
