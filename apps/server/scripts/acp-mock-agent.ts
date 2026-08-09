@@ -17,6 +17,7 @@ const emitToolCalls = process.env.T3_ACP_EMIT_TOOL_CALLS === "1";
 const emitInterleavedAssistantToolCalls =
   process.env.T3_ACP_EMIT_INTERLEAVED_ASSISTANT_TOOL_CALLS === "1";
 const emitGenericToolPlaceholders = process.env.T3_ACP_EMIT_GENERIC_TOOL_PLACEHOLDERS === "1";
+const emitKiroClientTools = process.env.T3_ACP_EMIT_KIRO_CLIENT_TOOLS === "1";
 const emitAskQuestion = process.env.T3_ACP_EMIT_ASK_QUESTION === "1";
 const emitXAiAskUserQuestion = process.env.T3_ACP_EMIT_XAI_ASK_USER_QUESTION === "1";
 const emitXAiPromptCompleteThenHang = process.env.T3_ACP_EMIT_XAI_PROMPT_COMPLETE_THEN_HANG === "1";
@@ -723,6 +724,52 @@ const program = Effect.gen(function* () {
         });
 
         return { stopReason: cancelled ? "cancelled" : "end_turn" };
+      }
+
+      if (emitKiroClientTools) {
+        const filePath = process.env.T3_ACP_KIRO_TOOL_FILE_PATH;
+        if (!filePath) {
+          return yield* AcpError.AcpRequestError.internalError(
+            "T3_ACP_KIRO_TOOL_FILE_PATH is required for Kiro client-tool tests.",
+          );
+        }
+        const source = yield* agent.client.readTextFile({
+          sessionId: requestedSessionId,
+          path: filePath,
+        });
+        if (source.content !== "bridge input\n") {
+          return yield* AcpError.AcpRequestError.internalError(
+            `Unexpected Kiro client file content: ${JSON.stringify(source.content)}`,
+          );
+        }
+        yield* agent.client.writeTextFile({
+          sessionId: requestedSessionId,
+          path: filePath,
+          content: "bridge output\n",
+        });
+        const terminal = yield* agent.client.createTerminal({
+          sessionId: requestedSessionId,
+          command: process.execPath,
+          args: ["-e", "process.stdout.write('git pull available')"],
+          cwd: process.cwd(),
+          outputByteLimit: 1024,
+        });
+        const exit = yield* terminal.waitForExit;
+        const output = yield* terminal.output;
+        yield* terminal.release;
+        if (exit.exitCode !== 0 || output.output !== "git pull available") {
+          return yield* AcpError.AcpRequestError.internalError(
+            `Unexpected Kiro client terminal result: ${JSON.stringify({ exit, output })}`,
+          );
+        }
+        yield* agent.client.sessionUpdate({
+          sessionId: requestedSessionId,
+          update: {
+            sessionUpdate: "agent_message_chunk",
+            content: { type: "text", text: "Kiro client tools completed" },
+          },
+        });
+        return { stopReason: "end_turn" };
       }
 
       if (emitGenericToolPlaceholders) {
